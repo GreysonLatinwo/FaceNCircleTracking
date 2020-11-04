@@ -20,6 +20,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
     using Microsoft.Kinect;
     using Microsoft.Kinect.Face;
     using OpenCvSharp;
+    using OpenCvSharp.Extensions;
 
     /// <summary>
     /// Interaction logic for MainWindow
@@ -45,7 +46,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         /// Text layout offset in X axis
         /// </summary>
         private const float TextLayoutOffsetX = -0.1f;
-        
+
         /// <summary>
         /// Text layout offset in Y axis
         /// </summary>
@@ -154,7 +155,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         private TrackingType tracking;
         private int frameCounter;
         private CircleSegment[] opencvCirclesHolder = new CircleSegment[0];
-
+        private Mat opencv8grey = new Mat();
         public int dp_resolution { get; set; }
 
         protected int minDistanceFromOtherCenter;
@@ -162,6 +163,8 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         protected double confidence;
         protected int minRadius;
         public int maxRadius;
+        private double drawingCanny1 = 30;
+        private double drawingCanny2 = 50;
         private readonly int bytesPerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
 
         /// <summary>
@@ -236,7 +239,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             // populate face result colors - one for each face index
             this.faceBrush = new List<Brush>()
             {
-                Brushes.White, 
+                Brushes.White,
                 Brushes.Orange,
                 Brushes.Green,
                 Brushes.Red,
@@ -391,7 +394,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     this.faceFrameSources[i] = null;
                 }
             }
-            
+
             if (this.bodyFrameReader != null)
             {
                 // BodyFrameReader is IDisposable
@@ -434,7 +437,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 }
             }
         }
-        
+
         /// <summary>
         /// Returns the index of the face frame source
         /// </summary>
@@ -461,7 +464,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             ColorFrame colorFrame = null;
             BodyFrame bodyFrame = null;
             bool isBitmapLocked = false;
-            Mat opencv8grey = new Mat();
+
 
             MultiSourceFrame multiSourceFrame = e.FrameReference.AcquireFrame();
 
@@ -479,38 +482,28 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 this.bitmap.Lock();
                 isBitmapLocked = true;
                 //Process color frame
-                
+
                 bodyFrame = multiSourceFrame.BodyFrameReference.AcquireFrame();
-                if(colorFrame != null)
+                if (colorFrame != null)
                     colorFrame.CopyConvertedFrameDataToIntPtr(this.bitmap.BackBuffer, this.bitmapBackBufferSize, ColorImageFormat.Bgra);
                 // Process body and face data
                 if (bodyFrame != null)
                 {
-                    if(tracking == TrackingType.Face || tracking == TrackingType.All)
+                    if (tracking == TrackingType.Face || tracking == TrackingType.All)
                         bodyFrame.GetAndRefreshBodyData(this.bodies);
                     if (tracking == TrackingType.Circle || tracking == TrackingType.All)
                     {
                         opencv8grey = new Mat(new int[] { this.bitmap.PixelHeight, this.bitmap.PixelWidth * 4 }, MatType.CV_8UC1, this.bitmap.BackBuffer)
-                                                                    .Resize(new OpenCvSharp.Size(this.bitmap.PixelWidth, this.bitmap.PixelHeight), 0.25, 0);
+                            .Resize(new OpenCvSharp.Size(this.bitmap.PixelWidth, this.bitmap.PixelHeight), 0.25, 0);
                         if (frameCounter % 2 == 0)
                         {
-                            
-                            CircleSegment[] opencvCircles = opencv8grey.HoughCircles(HoughMethods.GradientAlt,
-                                                                                                    this.dp_resolution,
-                                                                                                    this.minDistanceFromOtherCenter,
-                                                                                                    this.canny_upper_threshold,
-                                                                                                    this.confidence,
-                                                                                                    this.minRadius,
-                                                                                                    this.maxRadius);
-                            /*
-                            foreach (CircleSegment circle in opencvCircles)
-                                opencv8grey.DrawMarker(new OpenCvSharp.Point(circle.Center.X, circle.Center.Y), new Scalar(100), MarkerTypes.Cross, (int)circle.Radius, 10);
-                            int numpics = Directory.GetFiles(@"C:\Users\Tevatron\Desktop\MatSC", "*.png").Length;
-                            opencv8grey.ImWrite($@"C:\Users\Tevatron\Desktop\MatSC\image{numpics + 1}.png");
-                            */
-                            if (opencvCircles.Length > 0)
-                                opencvCirclesHolder = opencvCircles;
+                            opencvCirclesHolder = opencv8grey.HoughCircles(HoughMethods.GradientAlt, this.dp_resolution, this.minDistanceFromOtherCenter,
+                                this.canny_upper_threshold, this.confidence, this.minRadius, this.maxRadius);
+                            //if(opencvCirclesHolder.Length > 0)
+                            //saveMat(opencvCirclesHolder, opencv8grey.Canny(50, 300));
 
+
+                            //saveMat(opencvCirclesHolder, opencv8grey);
                         }
                     }
 
@@ -518,6 +511,13 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     {
                         // draw the dark background
                         dc.DrawRectangle(Brushes.Black, null, this.displayRect);
+                        //WriteableBitmap _wb = new WriteableBitmap(Convert(opencv8grey.Canny(this.drawingCanny1, this.drawingCanny2).ToBitmap()));
+
+                        if (opencv8grey.Cols != 0)
+                        {
+                            //_wb.WritePixels(new Int32Rect(0, 0, 1920, 1080), data, _stride,0);
+                            //_wb.WritePixels(new Int32Rect(0, 0, 1920, 1080), opencv8grey.CvPtr, bufferSize, _stride);
+                        }
                         //draw the color frame
                         dc.DrawImage(this.bitmap, this.displayRect);
                         bool drawFaceResult = false;
@@ -563,15 +563,21 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         }
                         if (tracking == TrackingType.Circle || tracking == TrackingType.All)
                         {
-                            foreach (CircleSegment circle in opencvCirclesHolder)
+                            for(int i = 0; i < opencvCirclesHolder.Length; i++)
                             {
-                                dc.DrawRectangle(Brushes.BlueViolet, null, new System.Windows.Rect(new System.Windows.Point(circle.Center.X - 5, circle.Center.Y - 5), new System.Windows.Point(circle.Center.X + 5, circle.Center.Y + 5)));
+                                CircleSegment circle = opencvCirclesHolder[i];
+                                //dc.DrawRectangle(Brushes.BlueViolet, null, new System.Windows.Rect(new System.Windows.Point(circle.Center.X - 5, circle.Center.Y - 5), new System.Windows.Point(circle.Center.X + 5, circle.Center.Y + 5)));
+                                dc.DrawText(
+                                    new FormattedText(i.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.BlueViolet),
+                                    new System.Windows.Point(circle.Center.X, circle.Center.Y)
+                                );
                                 dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(circle.Center.X, circle.Center.Y), circle.Radius, circle.Radius);
+
                             }
                         }
                     }
                 }
-                
+
             }
             finally
             {
@@ -596,12 +602,28 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             }
         }
 
-            /// <summary>
-            /// Handles the body frame data arriving from the sensor
-            /// </summary>
-            /// <param name="sender">object sending the event</param>
-            /// <param name="e">event arguments</param>
-            private void Reader_BodyFrameArrived(object sender, BodyFrameArrivedEventArgs e)
+        public static BitmapSource Convert(System.Drawing.Bitmap bitmap)
+        {
+            var bitmapData = bitmap.LockBits(
+                new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
+
+            var bitmapSource = BitmapSource.Create(
+                bitmapData.Width, bitmapData.Height,
+                bitmap.HorizontalResolution, bitmap.VerticalResolution,
+                PixelFormats.Gray8, null,
+                bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
+
+            bitmap.UnlockBits(bitmapData);
+            return bitmapSource;
+        }
+
+        /// <summary>
+        /// Handles the body frame data arriving from the sensor
+        /// </summary>
+        /// <param name="sender">object sending the event</param>
+        /// <param name="e">event arguments</param>
+        private void Reader_BodyFrameArrived(object sender, BodyFrameArrivedEventArgs e)
         {
             using (var bodyFrame = e.FrameReference.AcquireFrame())
             {
@@ -660,6 +682,15 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             }
         }
 
+        private void saveMat(CircleSegment[] opencvCircles, Mat opencv8grey)
+        {
+
+            foreach (CircleSegment circle in opencvCircles)
+                opencv8grey.DrawMarker(new OpenCvSharp.Point(circle.Center.X, circle.Center.Y), new Scalar(128), MarkerTypes.Cross, (int)circle.Radius * 2, 10);
+            int numpics = Directory.GetFiles(@"C:\Users\Tevatron\Desktop\MatSC", "*.png").Length;
+            opencv8grey.ImWrite($@"C:\Users\Tevatron\Desktop\MatSC\image{numpics + 1}.png");
+        }
+
         /// <summary>
         /// Draws face frame results
         /// </summary>
@@ -709,7 +740,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     else
                     {
                         faceText += item.Value.ToString() + "\n";
-                    }                    
+                    }
                 }
             }
 
@@ -759,7 +790,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
                 faceTextLayout.X = textPointInColor.X;
                 faceTextLayout.Y = textPointInColor.Y;
-                isLayoutValid = true;                
+                isLayoutValid = true;
             }
 
             return isLayoutValid;
@@ -833,21 +864,73 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             {
                 case "accumRes":
                     this.dp_resolution = (int)e;
+                    using (DrawingContext dc = this.drawingGroup.Open())
+                    {
+                        dc.DrawImage(this.bitmap, this.displayRect);
+                        dc.DrawText(
+                            new FormattedText(e.ToString(),CultureInfo.GetCultureInfo("en-us"),FlowDirection.LeftToRight,new Typeface("Georgia"),DrawTextFontSize,Brushes.White),
+                            new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2)
+                            );
+                    }
                     break;
                 case "circleDist":
                     this.minDistanceFromOtherCenter = (int)e;
+                    using (DrawingContext dc = this.drawingGroup.Open())
+                    {
+                        dc.DrawImage(this.bitmap, this.displayRect);
+                        dc.DrawLine(new Pen(Brushes.Red, 10), new System.Windows.Point((this.displayRect.Width / 2) - e / 2, this.displayRect.Height / 2), new System.Windows.Point((this.displayRect.Width / 2) + e / 2, this.displayRect.Height / 2));
+                    }
                     break;
                 case "cannyThreshold":
                     this.canny_upper_threshold = (int)e;
+                    using (DrawingContext dc = this.drawingGroup.Open())
+                    {
+                        dc.DrawImage(this.bitmap, this.displayRect);
+                        dc.DrawText(
+                            new FormattedText(e.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.White),
+                            new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2)
+                            );
+                    }
                     break;
                 case "confidence":
-                    this.confidence = e;
+                    this.confidence = (double)(e / 100.0);
+                    using (DrawingContext dc = this.drawingGroup.Open())
+                    {
+                        dc.DrawImage(this.bitmap, this.displayRect);
+                        dc.DrawText(
+                            new FormattedText(e.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.White),
+                            new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2)
+                            );
+                    }
                     break;
-                case "minRadius":
+                case "minCircle":
                     this.minRadius = (int)e;
+                    using (DrawingContext dc = this.drawingGroup.Open())
+                    {
+                        dc.DrawImage(this.bitmap, this.displayRect);
+                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2), e, e);
+                    }
                     break;
-                case "maxRadius":
+                case "maxCircle":
                     this.maxRadius = (int)e;
+                    using (DrawingContext dc = this.drawingGroup.Open())
+                    {
+                        dc.DrawImage(this.bitmap, this.displayRect);
+                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2), e, e);
+                    }
+                    break;
+            }
+        }
+
+        private void Canny_values_changed(object sender, double e)
+        {
+            switch ((sender as Slider).Name)
+            {
+                case "canny1":
+                    this.drawingCanny1 = e;
+                    break;
+                case "canny2":
+                    this.drawingCanny2 = e;
                     break;
             }
         }
@@ -869,15 +952,25 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 {
                     tracking = TrackingType.All;
                 }
+                else if ((btn.Content as String).Equals("None"))
+                {
+                    tracking = TrackingType.All;
+                }
             }
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            HoughCircleAdjustWindow circleAdjust = new HoughCircleAdjustWindow();
-            circleAdjust.CircleDetectionAdjusted += Tracking_values_changed;
-            circleAdjust.Owner = this;
-            circleAdjust.Show();
+            HoughCircleAdjustWindow AdjustmentWindow = new HoughCircleAdjustWindow();
+            AdjustmentWindow.CircleDetectionAdjusted += Tracking_values_changed;
+            AdjustmentWindow.CannyAdjusted += Canny_values_changed;
+            AdjustmentWindow.Owner = this;
+            AdjustmentWindow.Show();
+        }
+
+        private void Button_Click_1(object sender, RoutedEventArgs e)
+        {
+            saveMat(opencvCirclesHolder, opencv8grey.Canny(50, 30));
         }
     }
 }

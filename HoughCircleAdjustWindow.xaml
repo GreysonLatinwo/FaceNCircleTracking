@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:Microsoft.Samples.Kinect.FaceBasics"
              mc:Ignorable="d" 
-             d:DesignHeight="396.436" d:DesignWidth="369.052" Title="Circle Detection Adjuster" SizeToContent="WidthAndHeight">
+             d:DesignHeight="544.436" d:DesignWidth="369.052" Title="Circle Detection Adjuster" SizeToContent="WidthAndHeight" ShowInTaskbar="False" WindowStartupLocation="CenterScreen">
     <Grid>
         <Slider x:Name="accumRes" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,26,0,0" ValueChanged="Slider_ValueChanged_0" Minimum="1" Maximum="256" SmallChange="1" LargeChange="4" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0" IsSnapToTickEnabled="True" Value="32"/>
         <Label Content="Accumulator Resolution" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,0,0,0" Width="285" Height="26"/>
@@ -13,12 +13,18 @@
         <Label Content="Distance from Other Circles" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,58,0,0" Width="285" Height="26"/>
         <Slider x:Name="cannyThreshold" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,137,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="100" Maximum="500" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
         <Label Content="Canny Upper Threshold" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,111,0,0" Width="285" Height="26"/>
-        <Slider x:Name="confidence" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,195,0,0" ValueChanged="Slider_ValueChanged_0" Value="0.9" Maximum="1" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0" TickFrequency="0.05" LargeChange="0.1" SmallChange="0.05"/>
+        <Slider x:Name="confidence" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,195,0,0" ValueChanged="Slider_ValueChanged_0" Value="65" Maximum="100" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0" LargeChange="0.1" SmallChange="1" Minimum="1"/>
         <Label Content="Circle Confidence" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,169,0,0" Width="285" Height="26"/>
-        <Slider x:Name="minCircle" HorizontalAlignment="Left" VerticalAlignment="Top" Height="28" Width="285" Margin="10,249,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="100" Maximum="200" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
+        <Slider x:Name="minCircle" HorizontalAlignment="Left" VerticalAlignment="Top" Height="28" Width="285" Margin="10,249,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="50" Maximum="200" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
         <Label Content="Minimum Circle Radius" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,223,0,0" Width="285" Height="26"/>
         <Slider x:Name="maxCircle" HorizontalAlignment="Left" VerticalAlignment="Top" Height="28" Width="285" Margin="10,307,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="540" Maximum="1000" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
         <Label Content="Maximum Circle Radius" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,281,0,0" Width="285" Height="26"/>
+
+        <Slider x:Name="canny1" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,401,0,0" ValueChanged="CannySliders_ValueChanged" IsSnapToTickEnabled="True" Value="50" Maximum="500" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
+        <Label Content="Canny 1" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,370,0,0" Width="285" Height="26"/>
+        <Slider x:Name="canny2" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,464,0,-16" ValueChanged="CannySliders_ValueChanged" IsSnapToTickEnabled="True" Value="100" Maximum="500" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
+        <Label Content="Canny 2" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,433,0,0" Width="285" Height="26"/>
+
 
     </Grid>
 </Window>

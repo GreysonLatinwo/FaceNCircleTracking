@@ -21,6 +21,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
     public partial class HoughCircleAdjustWindow : Window
     {
         public event EventHandler<double> CircleDetectionAdjusted;
+        public event EventHandler<double> CannyAdjusted;
         public HoughCircleAdjustWindow()
         {
             InitializeComponent();
@@ -28,8 +29,13 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         public virtual void Slider_ValueChanged_0(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             //invoke the event handler for the circle event
-            Console.WriteLine((sender as Slider).Name);
             CircleDetectionAdjusted?.Invoke((sender as Slider), e.NewValue);
+        }
+
+        public virtual void CannySliders_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            //invoke the event handler for the circle event
+            CannyAdjusted?.Invoke((sender as Slider), e.NewValue);
         }
     }
 }

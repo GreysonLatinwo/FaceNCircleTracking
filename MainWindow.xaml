@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:System="clr-namespace:System;assembly=mscorlib" x:Class="Microsoft.Samples.Kinect.FaceBasics.MainWindow"
         Title="Face Basics" 
-        Height="768" Width="1024" 
+        Height="781.5" Width="1046.5" 
         Loaded="MainWindow_Loaded"
-        Closing="MainWindow_Closing">
+        Closing="MainWindow_Closing" WindowStartupLocation="CenterScreen" Icon="Images/Logo.png">
     <Window.Resources>
         <SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e" />
         <SolidColorBrush x:Key="KinectPurpleBrush" Color="#ff52318f" />
@@ -18,8 +18,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Image Grid.Row="0" Source="Images\Logo.png" HorizontalAlignment="Left" Stretch="Fill" Height="32" Width="81" Margin="0 10 0 5" />
-        <TextBlock Grid.Row="0" Margin="0 0 -1 0" HorizontalAlignment="Right" VerticalAlignment="Bottom" Foreground="{StaticResource MediumGreyBrush}" FontFamily="Segoe UI" FontSize="18"><Run Text="Face Basics"/></TextBlock>
+        <Image Grid.Row="0" Source="Images\Untitled.png" HorizontalAlignment="Left" Stretch="Fill" Width="46" Margin="2,10,0,0" />
+        <TextBlock Grid.Row="0" Margin="0,0,-1,10" HorizontalAlignment="Right" VerticalAlignment="Bottom" Foreground="{StaticResource MediumGreyBrush}" FontFamily="Segoe UI" FontSize="18"><Run Text="Face Basics"/></TextBlock>
         <Image Grid.Row="0" Source="Images\Status.png" Stretch="None" HorizontalAlignment="Center" Margin="0 0 0 5" />
 
         <Viewbox Grid.Row="1" HorizontalAlignment="Center">
@@ -31,11 +31,15 @@
             <ComboBox x:Name="Tracking_Type" HorizontalAlignment="Left" Width="120" SelectionChanged="Tracking_Type_SelectionChanged" SelectedIndex="0" Height="22" VerticalAlignment="Top">
                 <Label Content="Tracking Type" HorizontalContentAlignment="Center" Width="117"/>
                 <Separator></Separator>
+                <ComboBoxItem Content="All" HorizontalContentAlignment="Center"/>
                 <ComboBoxItem Content="Circle" HorizontalContentAlignment="Center"/>
                 <ComboBoxItem Content="Face" HorizontalContentAlignment="Center"/>
-                <ComboBoxItem Content="All" HorizontalContentAlignment="Center"/>
+                <ComboBoxItem Content="None" HorizontalContentAlignment="Center"/>
             </ComboBox>
             <Button Content="Adjust Circle / Face Detection" Width="161" Click="Button_Click"/>
+            <Grid Height="20" Width="75">
+                <Button Content="Take Screenshot" Margin="584,-2,-606,2" Click="Button_Click_1"/>
+            </Grid>
         </StatusBar>
     </Grid>
 </Window>
