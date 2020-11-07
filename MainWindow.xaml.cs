@@ -21,6 +21,8 @@ namespace Microsoft.Samples.Kinect.FaceBasics
     using Microsoft.Kinect.Face;
     using OpenCvSharp;
     using OpenCvSharp.Extensions;
+    using MathNet.Numerics;
+    using System.Linq;
 
     /// <summary>
     /// Interaction logic for MainWindow
@@ -148,27 +150,98 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         /// </summary>
         private string statusText = null;
 
+        /// <summary>
+        /// the reader for the the multiframes
+        /// </summary>
         private MultiSourceFrameReader multiFrameSourceReader;
-        public enum TrackingType { Circle, Face, All };
-        private WriteableBitmap bitmap = null;
-        private uint bitmapBackBufferSize;
-        private TrackingType tracking;
-        private int frameCounter;
-        private CircleSegment[] opencvCirclesHolder = new CircleSegment[0];
-        private Mat opencv8grey = new Mat();
-        public int dp_resolution { get; set; }
 
+        /// <summary>
+        /// The types of objects that can be tracked
+        /// </summary>
+        public enum TrackingType { Circle, Face, All };
+
+        /// <summary>
+        /// the color frame bitmap
+        /// </summary>
+        private WriteableBitmap bitmap = null;
+
+        /// <summary>
+        /// the size of the data that the buffer represents
+        /// </summary>
+        private uint bitmapBackBufferSize;
+
+        /// <summary>
+        /// current type of object beign tracked
+        /// </summary>
+        private TrackingType tracking;
+
+        /// <summary>
+        /// the number of frames that has been captured
+        /// </summary>
+        private int frameCounter;
+
+        /// <summary>
+        /// an array of the current circles on screen
+        /// </summary>
+        private CircleSegment[] opencvCirclesHolder = new CircleSegment[0];
+
+        /// <summary>
+        /// the grey scale image of the color frame
+        /// </summary>
+        private Mat opencv8grey = new Mat();
+
+        /// <summary>
+        /// the inverse resolution of the grey scale image
+        /// </summary>
+        protected int dp_resolution;
+
+        /// <summary>
+        /// the number of pixels between a circle
+        /// </summary>
         protected int minDistanceFromOtherCenter;
+
+        /// <summary>
+        /// the upper threshold of the canny circle detection
+        /// </summary>
         protected int canny_upper_threshold;
+
+        /// <summary>
+        /// the confidence that a circle is a circle
+        /// </summary>
         protected double confidence;
+
+        /// <summary>
+        /// the smallest a circle can be
+        /// </summary>
         protected int minRadius;
+
+        /// <summary>
+        /// the largest a circle can be
+        /// </summary>
         public int maxRadius;
+
+        /// <summary>
+        /// the first parameter of the canny algorithm
+        /// </summary>
         private double drawingCanny1 = 30;
+
+        /// <summary>
+        /// the second parameter of the canny algorithm
+        /// </summary>
         private double drawingCanny2 = 50;
+
+        /// <summary>
+        /// the bytes per pixel of a BGR 32 bit image
+        /// </summary>
         private readonly int bytesPerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
+
+        private List<LinkedList<PointF>> faceLocationBuffer = new List<LinkedList<PointF>>();
+
+        private List<LinkedList<PointF>> circleLocationBuffer = new List<LinkedList<PointF>>();
 
         /// <summary>
         /// Initializes a new instance of the MainWindow class.
+        /// what else did you expect... its the main
         /// </summary>
         public MainWindow()
         {
@@ -231,6 +304,9 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
                 // open the corresponding reader
                 this.faceFrameReaders[i] = this.faceFrameSources[i].OpenReader();
+
+                //sets the face buffers to an empty linkedlist
+                faceLocationBuffer.Add(new LinkedList<PointF>());
             }
 
             // allocate storage to store face frame results for each face in the FOV
@@ -239,12 +315,12 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             // populate face result colors - one for each face index
             this.faceBrush = new List<Brush>()
             {
-                Brushes.White,
-                Brushes.Orange,
-                Brushes.Green,
+                Brushes.DarkGray,
                 Brushes.Red,
-                Brushes.LightBlue,
-                Brushes.Yellow
+                Brushes.Blue,
+                Brushes.MediumPurple,
+                Brushes.Teal,
+                Brushes.Black
             };
 
             // set IsAvailableChanged event notifier
@@ -278,12 +354,10 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             // initialize the components (controls) of the window
             this.InitializeComponent();
         }
-
         /// <summary>
         /// INotifyPropertyChangedPropertyChanged event to allow window controls to bind to changeable data
         /// </summary>
         public event PropertyChangedEventHandler PropertyChanged;
-
         /// <summary>
         /// Gets the bitmap to display
         /// </summary>
@@ -294,7 +368,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 return this.imageSource;
             }
         }
-
         /// <summary>
         /// Gets or sets the current status text to display
         /// </summary>
@@ -319,7 +392,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 }
             }
         }
-
         /// <summary>
         /// Converts rotation quaternion to Euler angles 
         /// And then maps them to a specified range of values to control the refresh rate
@@ -347,7 +419,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             yaw = (int)(Math.Floor((yawD + ((increment / 2.0) * (yawD > 0 ? 1.0 : -1.0))) / increment) * increment);
             roll = (int)(Math.Floor((rollD + ((increment / 2.0) * (rollD > 0 ? 1.0 : -1.0))) / increment) * increment);
         }
-
         /// <summary>
         /// Execute start up tasks
         /// </summary>
@@ -370,7 +441,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 this.bodyFrameReader.FrameArrived += this.Reader_BodyFrameArrived;
             }
         }
-
         /// <summary>
         /// Execute shutdown tasks
         /// </summary>
@@ -408,7 +478,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 this.kinectSensor = null;
             }
         }
-
         /// <summary>
         /// Handles the face frame data arriving from the sensor
         /// </summary>
@@ -437,7 +506,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 }
             }
         }
-
         /// <summary>
         /// Returns the index of the face frame source
         /// </summary>
@@ -458,7 +526,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
             return index;
         }
-
+        /// <summary>
+        /// takes the given frames and finds/tracks the set tracking object and sets the frame to be drawen
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void Reader_MultiSourceFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
         {
             ColorFrame colorFrame = null;
@@ -499,11 +571,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         {
                             opencvCirclesHolder = opencv8grey.HoughCircles(HoughMethods.GradientAlt, this.dp_resolution, this.minDistanceFromOtherCenter,
                                 this.canny_upper_threshold, this.confidence, this.minRadius, this.maxRadius);
-                            //if(opencvCirclesHolder.Length > 0)
-                            //saveMat(opencvCirclesHolder, opencv8grey.Canny(50, 300));
 
-
-                            //saveMat(opencvCirclesHolder, opencv8grey);
                         }
                     }
 
@@ -523,6 +591,8 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         bool drawFaceResult = false;
                         if (tracking == TrackingType.Face || tracking == TrackingType.All)
                         {
+                            //Fit.Polynomial()
+                            
                             // iterate through each face source
                             for (int i = 0; i < this.bodyCount; i++)
                             {
@@ -532,7 +602,67 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                                     // check if we have valid face frame results
                                     if (this.faceFrameResults[i] != null)
                                     {
+                                        int PolyOrder = 3;
                                         // draw face frame results
+                                        faceLocationBuffer[i].AddFirst(this.faceFrameResults[i].FacePointsInColorSpace[FacePointType.Nose]);
+                                        if (faceLocationBuffer[i].Count > 10)
+                                            faceLocationBuffer[i].RemoveLast();
+                                        if (faceLocationBuffer[i].Count > PolyOrder+1)
+                                        {
+                                            double[] facePosX = new double[faceLocationBuffer[i].Count];
+                                            double[] facePosY = new double[faceLocationBuffer[i].Count];
+                                            int bufferIdx = 0;
+                                            foreach (PointF p in faceLocationBuffer[i])
+                                            {
+                                                facePosX[bufferIdx] = p.X;
+                                                facePosY[bufferIdx] = p.Y;
+                                                bufferIdx++;
+                                            }
+                                            
+                                            double[] polyFitCurve = Fit.Polynomial(facePosX, facePosY, PolyOrder);
+                                            System.Windows.Point prevPoint = new System.Windows.Point();
+                                            for (int j = 0; j < facePosX.Length; j++)
+                                            {
+                                                double x = facePosX[j];
+                                                double y = 0;
+                                                for(int k = PolyOrder; k >= 0; k--)
+                                                {
+                                                    y += polyFitCurve[k] * Math.Pow(x, k);
+                                                }
+                                                
+                                                System.Windows.Point p = new System.Windows.Point(x, y);
+                                                if(j != 0)
+                                                    dc.DrawLine(new Pen(Brushes.Blue, 10), prevPoint, p);
+                                                prevPoint = p;
+                                            }
+
+                                            for (int j = 0; j < facePosX.Length; j++)
+                                            {
+                                                double xScale = facePosX[facePosX.Length - 2] - facePosX[facePosX.Length - 1];
+                                                double x = facePosX[0] + xScale*j;
+                                                double y = 0;
+                                                for (int k = PolyOrder; k >= 0; k--)
+                                                {
+                                                    y += polyFitCurve[k] * Math.Pow(x, k);
+                                                }
+
+                                                System.Windows.Point p = new System.Windows.Point(x, y);
+                                                if (j != 0)
+                                                    dc.DrawLine(new Pen(Brushes.Red, 10), prevPoint, p);
+                                                prevPoint = p;
+                                            }
+                                            /*
+                                            PointF prevPoint = faceLocationBuffer[i].First.Value;
+                                            foreach (PointF p in faceLocationBuffer[i])
+                                            {
+                                                if (p.GetHashCode() != prevPoint.GetHashCode())
+                                                {
+                                                    dc.DrawLine(new Pen(Brushes.Blue, 10), new System.Windows.Point(prevPoint.X, prevPoint.Y), new System.Windows.Point(p.X, p.Y));
+                                                }
+                                                prevPoint = p;
+                                            }
+                                            */
+                                        }
                                         this.DrawFaceFrameResults(i, this.faceFrameResults[i], dc);
 
                                         if (!drawFaceResult)
@@ -563,16 +693,85 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         }
                         if (tracking == TrackingType.Circle || tracking == TrackingType.All)
                         {
-                            for(int i = 0; i < opencvCirclesHolder.Length; i++)
+                            List<System.Windows.Point> drawncircles = new List<System.Windows.Point>();
+                            if(opencvCirclesHolder.Length > circleLocationBuffer.Count)
+                            {
+                                for(int i = 0; i < opencvCirclesHolder.Length; i++)
+                                {
+                                    circleLocationBuffer.Add(new LinkedList<PointF>());
+                                }
+                            }
+                            for (int i = 0; i < opencvCirclesHolder.Length; i++)
                             {
                                 CircleSegment circle = opencvCirclesHolder[i];
-                                //dc.DrawRectangle(Brushes.BlueViolet, null, new System.Windows.Rect(new System.Windows.Point(circle.Center.X - 5, circle.Center.Y - 5), new System.Windows.Point(circle.Center.X + 5, circle.Center.Y + 5)));
-                                dc.DrawText(
-                                    new FormattedText(i.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.BlueViolet),
-                                    new System.Windows.Point(circle.Center.X, circle.Center.Y)
-                                );
-                                dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(circle.Center.X, circle.Center.Y), circle.Radius, circle.Radius);
+                                if (!drawncircles.Contains(new System.Windows.Point(circle.Center.X, circle.Center.Y)))
+                                {
+                                    PointF circleCenter = new PointF();
+                                    circleCenter.X = circle.Center.X;
+                                    circleCenter.Y = circle.Center.Y;
+                                    circleLocationBuffer[i].AddFirst(circleCenter);
+                                    //sets that max buffer size
+                                    if (circleLocationBuffer[i].Count > 10)
+                                        circleLocationBuffer[i].RemoveLast();
+                                    //to make sure that the curve fitting has enough data
+                                    if (circleLocationBuffer[i].Count > 2)
+                                    {
+                                        double[] circlePosX = new double[circleLocationBuffer[i].Count];
+                                        double[] circlePosY = new double[circleLocationBuffer[i].Count];
+                                        int bufferIdx = 0;
+                                        foreach (PointF p in circleLocationBuffer[i])
+                                        {
+                                            circlePosX[bufferIdx] = p.X;
+                                            circlePosY[bufferIdx] = p.Y;
+                                            bufferIdx++;
+                                        }
 
+                                        double[] polyFitCurve = Fit.Polynomial(circlePosX, circlePosY, 2);
+                                        System.Windows.Point prevPoint = new System.Windows.Point();
+                                        for (int j = 0; j < circlePosX.Length; j++)
+                                        {
+                                            double x = circlePosX[j];
+                                            double y = polyFitCurve[2] * Math.Pow(x, 2) + x * polyFitCurve[1] + polyFitCurve[0];
+
+                                            System.Windows.Point p = new System.Windows.Point(x, y);
+                                            if (j != 0)
+                                                dc.DrawLine(new Pen(Brushes.Blue, 10), prevPoint, p);
+                                            prevPoint = p;
+                                        }
+
+                                        for (int j = 0; j < circlePosX.Length; j++)
+                                        {
+                                            double xScale = circlePosX[circlePosX.Length - 2] - circlePosX[circlePosX.Length - 1];
+                                            double x = circlePosX[0] + xScale * j;
+                                            double y = polyFitCurve[2] * Math.Pow(x, 2) + x * polyFitCurve[1] + polyFitCurve[0];
+
+                                            System.Windows.Point p = new System.Windows.Point(x, y);
+                                            if (j != 0)
+                                                dc.DrawLine(new Pen(Brushes.Red, 10), prevPoint, p);
+                                            prevPoint = p;
+                                        }
+                                        /*
+                                        PointF prevPoint = faceLocationBuffer[i].First.Value;
+                                        foreach (PointF p in faceLocationBuffer[i])
+                                        {
+                                            if (p.GetHashCode() != prevPoint.GetHashCode())
+                                            {
+                                                dc.DrawLine(new Pen(Brushes.Blue, 10), new System.Windows.Point(prevPoint.X, prevPoint.Y), new System.Windows.Point(p.X, p.Y));
+                                            }
+                                            prevPoint = p;
+                                        }
+                                        */
+                                    }
+
+                                    //dc.DrawRectangle(Brushes.BlueViolet, null, new System.Windows.Rect(new System.Windows.Point(circle.Center.X - 5, circle.Center.Y - 5), new System.Windows.Point(circle.Center.X + 5, circle.Center.Y + 5)));
+                                    dc.DrawText(
+                                        new FormattedText(i.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.BlueViolet),
+                                        new System.Windows.Point(circle.Center.X - DrawTextFontSize / 2, circle.Center.Y - DrawTextFontSize / 2)
+                                    );
+                                
+                                    dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(circle.Center.X, circle.Center.Y), circle.Radius, circle.Radius);
+                                    drawncircles.Add(new System.Windows.Point(circle.Center.X, circle.Center.Y));
+                                }
                             }
                         }
                     }
@@ -601,8 +800,12 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 frameCounter += 1;
             }
         }
-
-        public static BitmapSource Convert(System.Drawing.Bitmap bitmap)
+        /// <summary>
+        /// converts the given bitmap to a bitmap source
+        /// </summary>
+        /// <param name="bitmap"></param>
+        /// <returns>the given bitmap as a bitmap source</returns>
+        private static BitmapSource Convert(System.Drawing.Bitmap bitmap)
         {
             var bitmapData = bitmap.LockBits(
                 new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
@@ -617,7 +820,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             bitmap.UnlockBits(bitmapData);
             return bitmapSource;
         }
-
         /// <summary>
         /// Handles the body frame data arriving from the sensor
         /// </summary>
@@ -681,7 +883,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 }
             }
         }
-
+        /// <summary>
+        /// draws a cross on the location of the circles saves an image of the matrix to C:\Users\Tevatron\Desktop\MatSC
+        /// </summary>
+        /// <param name="opencvCircles"></param>
+        /// <param name="opencv8grey"></param>
         private void saveMat(CircleSegment[] opencvCircles, Mat opencv8grey)
         {
 
@@ -690,7 +896,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             int numpics = Directory.GetFiles(@"C:\Users\Tevatron\Desktop\MatSC", "*.png").Length;
             opencv8grey.ImWrite($@"C:\Users\Tevatron\Desktop\MatSC\image{numpics + 1}.png");
         }
-
         /// <summary>
         /// Draws face frame results
         /// </summary>
@@ -761,7 +966,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 //drawingContext.DrawText(new FormattedText(faceText,CultureInfo.GetCultureInfo("en-us"),FlowDirection.LeftToRight,new Typeface("Georgia"),DrawTextFontSize,drawingBrush),faceTextLayout);
             }
         }
-
         /// <summary>
         /// Computes the face result text position by adding an offset to the corresponding 
         /// body's head joint in camera space and then by projecting it to screen space
@@ -795,7 +999,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
             return isLayoutValid;
         }
-
         /// <summary>
         /// Validates face bounding box and face points to be within screen space
         /// </summary>
@@ -842,7 +1045,6 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
             return isFaceValid;
         }
-
         /// <summary>
         /// Handles the event which the sensor becomes unavailable (E.g. paused, closed, unplugged).
         /// </summary>
@@ -857,7 +1059,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                                                                 : Properties.Resources.SensorNotAvailableStatusText;
             }
         }
-
+        /// <summary>
+        /// sets the hough circle detection parameters
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void Tracking_values_changed(object sender, double e)
         {
             switch ((sender as Slider).Name)
@@ -869,7 +1075,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         dc.DrawImage(this.bitmap, this.displayRect);
                         dc.DrawText(
                             new FormattedText(e.ToString(),CultureInfo.GetCultureInfo("en-us"),FlowDirection.LeftToRight,new Typeface("Georgia"),DrawTextFontSize,Brushes.White),
-                            new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2)
+                            new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2)
                             );
                     }
                     break;
@@ -878,7 +1084,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     using (DrawingContext dc = this.drawingGroup.Open())
                     {
                         dc.DrawImage(this.bitmap, this.displayRect);
-                        dc.DrawLine(new Pen(Brushes.Red, 10), new System.Windows.Point((this.displayRect.Width / 2) - e / 2, this.displayRect.Height / 2), new System.Windows.Point((this.displayRect.Width / 2) + e / 2, this.displayRect.Height / 2));
+                        dc.DrawLine(new Pen(Brushes.Red, 10), new System.Windows.Point((this.bitmap.PixelWidth / 2) - e / 2, this.bitmap.PixelHeight / 2), new System.Windows.Point((this.bitmap.PixelWidth / 2) + e / 2, this.bitmap.PixelHeight / 2));
                     }
                     break;
                 case "cannyThreshold":
@@ -888,7 +1094,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         dc.DrawImage(this.bitmap, this.displayRect);
                         dc.DrawText(
                             new FormattedText(e.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.White),
-                            new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2)
+                            new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2)
                             );
                     }
                     break;
@@ -899,7 +1105,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         dc.DrawImage(this.bitmap, this.displayRect);
                         dc.DrawText(
                             new FormattedText(e.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.White),
-                            new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2)
+                            new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2)
                             );
                     }
                     break;
@@ -908,7 +1114,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     using (DrawingContext dc = this.drawingGroup.Open())
                     {
                         dc.DrawImage(this.bitmap, this.displayRect);
-                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2), e, e);
+                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2), e, e);
                     }
                     break;
                 case "maxCircle":
@@ -916,12 +1122,16 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     using (DrawingContext dc = this.drawingGroup.Open())
                     {
                         dc.DrawImage(this.bitmap, this.displayRect);
-                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(this.displayRect.Width / 2, this.displayRect.Height / 2), e, e);
+                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2), e, e);
                     }
                     break;
             }
         }
-
+        /// <summary>
+        /// sets the canny viewer values
+        /// </summary>
+        /// <param name="sender"> the slider that the data 'e' is coming from</param>
+        /// <param name="e">the data</param>
         private void Canny_values_changed(object sender, double e)
         {
             switch ((sender as Slider).Name)
@@ -934,7 +1144,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                     break;
             }
         }
-
+        /// <summary>
+        /// sets the object type to track
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void Tracking_Type_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ComboBoxItem btn = (sender as ComboBox).SelectedItem as ComboBoxItem;
@@ -958,7 +1172,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 }
             }
         }
-
+        /// <summary>
+        /// opens the canny detection and hough circle detection adjuster window
+        /// </summary>
+        /// <param name="sender">the WPF object that the data 'e' is coming from</param>
+        /// <param name="e">the data</param>
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             HoughCircleAdjustWindow AdjustmentWindow = new HoughCircleAdjustWindow();
@@ -967,7 +1185,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             AdjustmentWindow.Owner = this;
             AdjustmentWindow.Show();
         }
-
+        /// <summary>
+        /// saves the canny view screen shot
+        /// </summary>
+        /// <param name="sender">not used</param>
+        /// <param name="e">not used</param>
         private void Button_Click_1(object sender, RoutedEventArgs e)
         {
             saveMat(opencvCirclesHolder, opencv8grey.Canny(50, 30));
