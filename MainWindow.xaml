@@ -37,9 +37,7 @@
                 <ComboBoxItem Content="None" HorizontalContentAlignment="Center"/>
             </ComboBox>
             <Button Content="Adjust Circle / Face Detection" Width="161" Click="Button_Click"/>
-            <Grid Height="20" Width="75">
-                <Button Content="Take Screenshot" Margin="584,-2,-606,2" Click="Button_Click_1"/>
-            </Grid>
+            <Button Content="Take Screenshot" Click="Button_Click_1" Height="20" Width="98"/>
         </StatusBar>
     </Grid>
 </Window>

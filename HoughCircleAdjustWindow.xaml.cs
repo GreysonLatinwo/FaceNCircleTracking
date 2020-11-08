@@ -31,11 +31,5 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             //invoke the event handler for the circle event
             CircleDetectionAdjusted?.Invoke((sender as Slider), e.NewValue);
         }
-
-        public virtual void CannySliders_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            //invoke the event handler for the circle event
-            CannyAdjusted?.Invoke((sender as Slider), e.NewValue);
-        }
     }
 }
