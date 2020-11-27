@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -30,6 +31,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         {
             //invoke the event handler for the circle event
             CircleDetectionAdjusted?.Invoke((sender as Slider), e.NewValue);
+        }
+
+        private void circleDist_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+
         }
     }
 }

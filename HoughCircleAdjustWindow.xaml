@@ -12,7 +12,7 @@
     <Grid>
         <Slider x:Name="accumRes" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,26,0,0" ValueChanged="Slider_ValueChanged_0" Minimum="1" Maximum="256" SmallChange="1" LargeChange="4" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0" IsSnapToTickEnabled="True" Value="16"/>
         <Label Content="Accumulator Resolution" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,0,0,0" Width="285" Height="26"/>
-        <Slider x:Name="circleDist" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,84,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="50" Maximum="640" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
+        <Slider x:Name="circleDist" MouseDown="circleDist_MouseDown" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,84,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="50" Maximum="640" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
         <Label Content="Distance from Other Circles" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,58,0,0" Width="285" Height="26"/>
         <Slider x:Name="cannyThreshold" HorizontalAlignment="Left" VerticalAlignment="Top" Height="27" Width="285" Margin="10,137,0,0" ValueChanged="Slider_ValueChanged_0" IsSnapToTickEnabled="True" Value="350" Maximum="500" AutoToolTipPlacement="BottomRight" AutoToolTipPrecision="0"/>
         <Label Content="Canny Upper Threshold" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,111,0,0" Width="285" Height="26"/>

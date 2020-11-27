@@ -4,27 +4,26 @@
 // </copyright>
 //------------------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Kinect;
+using Microsoft.Kinect.Face;
+using OpenCvSharp;
+using MathNet.Numerics;
+using System.Windows.Threading;
+using FaceBasics_WPFML.Model;
+using Point = System.Windows.Point;
+
 namespace Microsoft.Samples.Kinect.FaceBasics
 {
-    using System;
-    using System.Collections.Generic;
-    using System.ComponentModel;
-    using System.Diagnostics;
-    using System.Globalization;
-    using System.IO;
-    using System.Windows;
-    using System.Windows.Controls;
-    using System.Windows.Media;
-    using System.Windows.Media.Imaging;
-    using System.Windows.Media.Media3D;
-    using Microsoft.Kinect;
-    using Microsoft.Kinect.Face;
-    using OpenCvSharp;
-    using OpenCvSharp.Extensions;
-    using MathNet.Numerics;
-    using System.Linq;
-    using System.Windows.Threading;
-
     /// <summary>
     /// Interaction logic for MainWindow
     /// </summary>
@@ -61,8 +60,24 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         private const double FaceRotationIncrementInDegrees = 5.0;
 
         /// <summary>
+        /// Brush used for drawing joints that are currently tracked
+        /// </summary>
+        private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
+
+        /// <summary>
+        /// Brush used for drawing joints that are currently inferred
+        /// </summary>        
+        private readonly Brush inferredJointBrush = Brushes.Yellow;
+
+        /// <summary>
+        /// Thickness of drawn joint lines
+        /// </summary>
+        private const double JointThickness = 3;
+
+        /// <summary>
         /// Formatted text to indicate that there are no bodies/faces tracked in the FOV
         /// </summary>
+        [Obsolete]
         private FormattedText textFaceNotTracked = new FormattedText(
                         "No bodies or faces are tracked ...",
                         CultureInfo.GetCultureInfo("en-us"),
@@ -140,6 +155,11 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         /// Display rectangle
         /// </summary>
         private System.Windows.Rect displayRect;
+
+        /// <summary>
+        /// Pen used for drawing bones that are currently inferred
+        /// </summary>        
+        private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
 
         /// <summary>
         /// List of brushes for each face tracked
@@ -224,6 +244,18 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         public int maxRadius;
 
         /// <summary>
+        /// definition of bones
+        /// </summary>
+        private List<Tuple<JointType, JointType>> bones;
+
+        /// <summary>
+        /// List of colors for each body tracked
+        /// </summary>
+        private List<Pen> bodyColors;
+
+
+
+        /// <summary>
         /// the bytes per pixel of a BGR 32 bit image
         /// </summary>
         private readonly int bytesPerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
@@ -234,6 +266,8 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
         private DispatcherTimer dispatcherTimer = new DispatcherTimer();
         private Stopwatch stopwatch = new Stopwatch();
+        private int depthWidth;
+        private int depthHeight;
 
         /// <summary>
         /// Initializes a new instance of the MainWindow class.
@@ -241,12 +275,15 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         /// </summary>
         public MainWindow()
         {
+            
             // one sensor is currently supported
             this.kinectSensor = KinectSensor.GetDefault();
 
             // get the coordinate mapper
             this.coordinateMapper = this.kinectSensor.CoordinateMapper;
-
+            FrameDescription depthFrameDescription = this.kinectSensor.DepthFrameSource.FrameDescription;
+            this.depthWidth = depthFrameDescription.Width;
+            this.depthHeight = depthFrameDescription.Height;
             // get the color frame details
             FrameDescription frameDescription = this.kinectSensor.ColorFrameSource.FrameDescription;
 
@@ -265,6 +302,8 @@ namespace Microsoft.Samples.Kinect.FaceBasics
 
             // wire handler for body frame arrival
             //this.bodyFrameReader.FrameArrived += this.Reader_BodyFrameArrived;
+
+            initBones();
 
             this.multiFrameSourceReader = this.kinectSensor.OpenMultiSourceFrameReader(FrameSourceTypes.Color | FrameSourceTypes.Body);
 
@@ -321,6 +360,14 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                 Brushes.Black
             };
 
+            this.bodyColors = new List<Pen>();
+            this.bodyColors.Add(new Pen(Brushes.Red, 6));
+            this.bodyColors.Add(new Pen(Brushes.Orange, 6));
+            this.bodyColors.Add(new Pen(Brushes.Green, 6));
+            this.bodyColors.Add(new Pen(Brushes.Blue, 6));
+            this.bodyColors.Add(new Pen(Brushes.Indigo, 6));
+            this.bodyColors.Add(new Pen(Brushes.Violet, 6));
+
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
 
@@ -334,7 +381,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             this.canny_upper_threshold = 100; //100                              //detection threshold. The higher the faster the fps
             this.confidence = 90.0 / 100.0; //0.85                              //the percent confidence that a circle really is a circle
             this.minRadius = 50; //20                                            //minimum size that a circle must be greater than
-            this.maxRadius = this.bitmap.PixelWidth / 4; // 1/3 the screen  //maximum size that a circle must be less than
+            this.maxRadius = 250; // 1/3 the screen  //maximum size that a circle must be less than
 
             // set the status text
             this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
@@ -357,6 +404,47 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             // initialize the components (controls) of the window
             this.InitializeComponent();
         }
+
+        private void initBones()
+        {
+            // a bone defined as a line between two joints
+            this.bones = new List<Tuple<JointType, JointType>>();
+
+            // Torso
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.Head, JointType.Neck));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.Neck, JointType.SpineShoulder));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.SpineShoulder, JointType.SpineMid));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.SpineMid, JointType.SpineBase));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.SpineShoulder, JointType.ShoulderRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.SpineShoulder, JointType.ShoulderLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.SpineBase, JointType.HipRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.SpineBase, JointType.HipLeft));
+
+            // Right Arm
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.ShoulderRight, JointType.ElbowRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.ElbowRight, JointType.WristRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.WristRight, JointType.HandRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.HandRight, JointType.HandTipRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.WristRight, JointType.ThumbRight));
+
+            // Left Arm
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.ShoulderLeft, JointType.ElbowLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.ElbowLeft, JointType.WristLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.WristLeft, JointType.HandLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.HandLeft, JointType.HandTipLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.WristLeft, JointType.ThumbLeft));
+
+            // Right Leg
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.HipRight, JointType.KneeRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.KneeRight, JointType.AnkleRight));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.AnkleRight, JointType.FootRight));
+
+            // Left Leg
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.HipLeft, JointType.KneeLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.KneeLeft, JointType.AnkleLeft));
+            this.bones.Add(new Tuple<JointType, JointType>(JointType.AnkleLeft, JointType.FootLeft));
+        }
+
         /// <summary>
         /// INotifyPropertyChangedPropertyChanged event to allow window controls to bind to changeable data
         /// </summary>
@@ -534,6 +622,130 @@ namespace Microsoft.Samples.Kinect.FaceBasics
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
+
+        private void drawCurve(LinkedList<PointF> buffer, DrawingContext dc, int PolyOrder)
+        {
+            double[] facePosX = new double[buffer.Count];
+            double[] facePosY = new double[buffer.Count];
+            int bufferIdx = 0;
+            foreach (PointF p in buffer)
+            {
+                facePosX[bufferIdx] = p.X;
+                facePosY[bufferIdx] = p.Y;
+                bufferIdx++;
+            }
+            Point prevPoint = new Point();
+            for (int i = 0; i < facePosX.Length; i++)
+            {
+                Point currentPoint = new Point(facePosX[i], facePosY[i]);
+                if (i != 0)
+                    dc.DrawLine(new Pen(Brushes.Green, 10), prevPoint, currentPoint);
+                prevPoint = currentPoint;
+            }
+
+            double[] polyFitCurve = Fit.Polynomial(facePosX, facePosY, PolyOrder);
+            
+            for (int j = 0; j < facePosX.Length; j++)
+            {
+                double x = facePosX[j];
+                double y = 0;
+                for (int k = PolyOrder; k >= 0; k--)
+                {
+                    y += polyFitCurve[k] * Math.Pow(x, k);
+                }
+
+                System.Windows.Point p = new System.Windows.Point(x, y);
+                if (j != 0)
+                    dc.DrawLine(new Pen(Brushes.Blue, 10), prevPoint, p);
+                prevPoint = p;
+            }
+
+            for (int j = 0; j < facePosX.Length; j++)
+            {
+                double xScale = facePosX[facePosX.Length - 2] - facePosX[facePosX.Length - 1];
+                double x = facePosX[0] + xScale * j;
+                double y = 0;
+                for (int k = PolyOrder; k >= 0; k--)
+                {
+                    y += polyFitCurve[k] * Math.Pow(x, k);
+                }
+
+                System.Windows.Point p = new System.Windows.Point(x, y);
+                if (j != 0)
+                    dc.DrawLine(new Pen(Brushes.Red, 10), prevPoint, p);
+                prevPoint = p;
+            }
+        }
+
+        /// <summary>
+        /// Draws a body
+        /// </summary>
+        /// <param name="joints">joints to draw</param>
+        /// <param name="jointPoints">translated positions of joints to draw</param>
+        /// <param name="drawingContext">drawing context to draw to</param>
+        /// <param name="drawingPen">specifies color to draw a specific body</param>
+        private void DrawBody(IReadOnlyDictionary<JointType, Joint> joints, IDictionary<JointType, Point> jointPoints, DrawingContext drawingContext, Pen drawingPen)
+        {
+            // Draw the bones
+            foreach (var bone in this.bones)
+            {
+                this.DrawBone(joints, jointPoints, bone.Item1, bone.Item2, drawingContext, drawingPen);
+            }
+
+            // Draw the joints
+            foreach (JointType jointType in joints.Keys)
+            {
+                Brush drawBrush = null;
+
+                TrackingState trackingState = joints[jointType].TrackingState;
+
+                if (trackingState == TrackingState.Tracked)
+                {
+                    drawBrush = this.trackedJointBrush;
+                }
+                else if (trackingState == TrackingState.Inferred)
+                {
+                    drawBrush = this.inferredJointBrush;
+                }
+
+                if (drawBrush != null)
+                {
+                    drawingContext.DrawEllipse(drawBrush, null, jointPoints[jointType], JointThickness, JointThickness);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Draws one bone of a body (joint to joint)
+        /// </summary>
+        /// <param name="joints">joints to draw</param>
+        /// <param name="jointPoints">translated positions of joints to draw</param>
+        /// <param name="jointType0">first joint of bone to draw</param>
+        /// <param name="jointType1">second joint of bone to draw</param>
+        /// <param name="drawingContext">drawing context to draw to</param>
+        /// /// <param name="drawingPen">specifies color to draw a specific bone</param>
+        private void DrawBone(IReadOnlyDictionary<JointType, Joint> joints, IDictionary<JointType, Point> jointPoints, JointType jointType0, JointType jointType1, DrawingContext drawingContext, Pen drawingPen)
+        {
+            Joint joint0 = joints[jointType0];
+            Joint joint1 = joints[jointType1];
+
+            // If we can't find either of these joints, exit
+            if (joint0.TrackingState == TrackingState.NotTracked ||
+                joint1.TrackingState == TrackingState.NotTracked)
+            {
+                return;
+            }
+
+            // We assume all drawn bones are inferred unless BOTH joints are tracked
+            Pen drawPen = this.inferredBonePen;
+            if ((joint0.TrackingState == TrackingState.Tracked) && (joint1.TrackingState == TrackingState.Tracked))
+            {
+                drawPen = drawingPen;
+            }
+
+            drawingContext.DrawLine(drawPen, jointPoints[jointType0], jointPoints[jointType1]);
+        }
+
         private void Reader_MultiSourceFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
         {
             ColorFrame colorFrame = null;
@@ -579,78 +791,54 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                             // iterate through each face source
                             for (int i = 0; i < this.bodyCount; i++)
                             {
+                                Pen drawPen = this.bodyColors[i];
                                 // check if a valid face is tracked in this face source
-                                if (faceFrameSources[i].IsTrackingIdValid)
+                                if (bodies[i].IsTracked)
                                 {
-                                    // check if we have valid face frame results
-                                    if (faceFrameResults[i] != null)
+                                    
+
+                                    IReadOnlyDictionary<JointType, Joint> joints = bodies[i].Joints;
+
+                                    // convert the joint points to depth (display) space
+                                    Dictionary<JointType, Point> jointPoints = new Dictionary<JointType, Point>();
+
+                                    foreach (JointType jointType in joints.Keys)
                                     {
-                                        int PolyOrder = 2;
+                                        // sometimes the depth(Z) of an inferred joint may show as negative
+                                        // clamp down to 0.1f to prevent coordinatemapper from returning (-Infinity, -Infinity)
+                                        CameraSpacePoint position = joints[jointType].Position;
+                                        if (position.Z < 0)
+                                        {
+                                            position.Z = 0.1f;
+                                        }
+
+                                        ColorSpacePoint depthSpacePoint = this.coordinateMapper.MapCameraPointToColorSpace(position);
+                                        jointPoints[jointType] = new Point(depthSpacePoint.X, depthSpacePoint.Y);
+                                    }
+
+                                    this.DrawBody(joints, jointPoints, dc, drawPen);
+
+
+                                    // check if we have valid face frame results
+                                    //if (faceFrameResults[i] != null)
+                                    {
+                                        int PolyOrder = 1;
+                                        CameraSpacePoint head = bodies[i].Joints[JointType.Head].Position;
                                         // draw face frame results
-                                        PointF nosePoint = faceFrameResults[i].FacePointsInColorSpace[FacePointType.Nose];
-                                        PointF firstIdx = faceLocationBuffer[i].Get<PointF>(0);
-                                        //if (nosePoint.X - firstIdx.X >= 1 && nosePoint.Y - firstIdx.Y >= 1) //TODO
-                                        faceLocationBuffer[i].AddFirst(nosePoint);
-                                        if (faceLocationBuffer[i].Count > 10)
+                                        //PointF nosePoint = faceFrameResults[i].FacePointsInColorSpace[FacePointType.Nose];
+                                        PointF headlocation = new PointF()
+                                        {
+                                            X = (float)jointPoints[JointType.Head].X,
+                                            Y = (float)jointPoints[JointType.Head].Y
+                                        };
+                                        faceLocationBuffer[i].AddFirst(headlocation);
+                                        if (faceLocationBuffer[i].Count > 4)
                                             faceLocationBuffer[i].RemoveLast();
                                         if (faceLocationBuffer[i].Count > PolyOrder+1)
                                         {
-                                            double[] facePosX = new double[faceLocationBuffer[i].Count];
-                                            double[] facePosY = new double[faceLocationBuffer[i].Count];
-                                            int bufferIdx = 0;
-                                            foreach (PointF p in faceLocationBuffer[i])
-                                            {
-                                                facePosX[bufferIdx] = p.X;
-                                                facePosY[bufferIdx] = p.Y;
-                                                bufferIdx++;
-                                            }
-                                            
-                                            double[] polyFitCurve = Fit.Polynomial(facePosX, facePosY, PolyOrder);
-                                            System.Windows.Point prevPoint = new System.Windows.Point();
-                                            for (int j = 0; j < facePosX.Length; j++)
-                                            {
-                                                double x = facePosX[j];
-                                                double y = 0;
-                                                for(int k = PolyOrder; k >= 0; k--)
-                                                {
-                                                    y += polyFitCurve[k] * Math.Pow(x, k);
-                                                }
-                                                
-                                                System.Windows.Point p = new System.Windows.Point(x, y);
-                                                if(j != 0)
-                                                    dc.DrawLine(new Pen(Brushes.Blue, 10), prevPoint, p);
-                                                prevPoint = p;
-                                            }
-
-                                            for (int j = 0; j < facePosX.Length; j++)
-                                            {
-                                                double xScale = facePosX[facePosX.Length - 2] - facePosX[facePosX.Length - 1];
-                                                double x = facePosX[0] + xScale*j;
-                                                double y = 0;
-                                                for (int k = PolyOrder; k >= 0; k--)
-                                                {
-                                                    y += polyFitCurve[k] * Math.Pow(x, k);
-                                                }
-
-                                                System.Windows.Point p = new System.Windows.Point(x, y);
-                                                if (j != 0)
-                                                    dc.DrawLine(new Pen(Brushes.Red, 10), prevPoint, p);
-                                                prevPoint = p;
-                                            }
-                                            
-                                            PointF prevPoint1 = faceLocationBuffer[i].First.Value;
-                                            foreach (PointF p in faceLocationBuffer[i])
-                                            {
-                                                if (p.GetHashCode() != prevPoint.GetHashCode())
-                                                {
-                                                    dc.DrawLine(new Pen(Brushes.Orange, 10), new System.Windows.Point(prevPoint1.X, prevPoint1.Y), new System.Windows.Point(p.X, p.Y));
-                                                }
-                                                prevPoint1 = p;
-                                            }
-                                            
+                                            drawCurve(faceLocationBuffer[i], dc, PolyOrder);
                                         }
-                                        this.DrawFaceFrameResults(i, this.faceFrameResults[i], dc);
-
+                                        //this.DrawFaceFrameResults(i, this.faceFrameResults[i], dc);
                                         if (!drawFaceResult)
                                         {
                                             drawFaceResult = true;
@@ -679,10 +867,9 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         }
                         if (tracking == TrackingType.Circle || tracking == TrackingType.All)
                         {
-                            opencv8grey = new Mat(new int[] { this.bitmap.PixelHeight, this.bitmap.PixelWidth * 4 }, MatType.CV_8UC1, this.bitmap.BackBuffer)
-                            .Resize(new OpenCvSharp.Size(this.bitmap.PixelWidth, this.bitmap.PixelHeight), 0.25, 0);
-                            int ROIWidth = 400;
-                            int ROIHeight = 400;
+                            //get Rectangle of interest
+                            int ROIWidth = maxRadius*2;
+                            int ROIHeight = maxRadius*2;
                             int ROICenterX;
                             int ROICenterY;
                             if (opencvCirclesHolder.Length > 0 || circleLocationBuffer.Count > 0 && circleLocationBuffer[0].Count > 0)
@@ -695,19 +882,30 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                                 ROICenterX = displayWidth / 2;
                                 ROICenterY = displayHeight / 2;
                             }
-                            int ROIXOffset = ROICenterX - ROIWidth/2;
-                            int ROIYOffset = ROICenterY - ROIHeight/2;
+                            int ROIXOffset = ROICenterX - ROIWidth / 2;
+                            int ROIYOffset = ROICenterY - ROIHeight / 2;
+                            //make sure that the square is in the frame lower bound
                             ROIXOffset = ROIXOffset < 0 ? 0 : ROIXOffset;
                             ROIYOffset = ROIYOffset < 0 ? 0 : ROIYOffset;
+                            //make sure that the square is in the frame upper bound
+                            ROIXOffset = ROIXOffset > displayWidth - ROIWidth - 1 ? displayWidth - ROIWidth - 1 : ROIXOffset;
+                            ROIYOffset = ROIYOffset > displayHeight - ROIHeight - 1 ? displayHeight - ROIHeight - 1 : ROIYOffset;
+                            //set ROI
                             OpenCvSharp.Rect ROI = new OpenCvSharp.Rect(ROIXOffset, ROIYOffset, ROIWidth, ROIHeight);
-                            Mat opencv8greyCropped = new Mat(opencv8grey, ROI);
-                            opencv8grey.Rectangle(ROI, 100, 10);
+                            opencv8grey = new Mat(new Mat(new int[] { this.bitmap.PixelHeight, this.bitmap.PixelWidth * 4 }, MatType.CV_8UC1, this.bitmap.BackBuffer)
+                            .Resize(new OpenCvSharp.Size(this.bitmap.PixelWidth, this.bitmap.PixelHeight), 0.25, 0), ROI);
+                            
                             dc.DrawRectangle(null, new Pen(Brushes.Gray, 10), new System.Windows.Rect(ROIXOffset, ROIYOffset, ROI.Width, ROI.Height));
-                            //if (frameCounter % 2 == 0)
+                            //skip a number of frames
+                            if (frameCounter % 1 == 0)
                             {
-                                opencvCirclesHolder = opencv8greyCropped.HoughCircles(HoughMethods.GradientAlt, dp_resolution, minDistanceFromOtherCenter,
-                                    canny_upper_threshold, confidence, minRadius, maxRadius);
-                                //saveMat(opencvCirclesHolder, opencv8greyCropped);
+                                // Add input data
+                                //ModelInput input = new ModelInput();
+                                //input.ImageSource = opencv8grey;
+                                // Load model and predict output of sample data
+                                //ModelOutput result = ConsumeModel.Predict(input);
+
+                                opencvCirclesHolder = opencv8grey.HoughCircles(HoughMethods.GradientAlt, dp_resolution, minDistanceFromOtherCenter, canny_upper_threshold, confidence, minRadius, maxRadius);
                             }
 
                             //list of locations that have a circle drawn
@@ -741,49 +939,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                                     //to make sure that the curve fitting algorithm has enough data points
                                     if (circleLocationBuffer[i].Count > polyOrder)
                                     {
-                                        double[] circlePosX = new double[circleLocationBuffer[i].Count];
-                                        double[] circlePosY = new double[circleLocationBuffer[i].Count];
-                                        int bufferIdx = 0;
-                                        //convert the current circle's buffer to 2 arrays
-                                        foreach (PointF p in circleLocationBuffer[i])
-                                        {
-                                            circlePosX[bufferIdx] = p.X;
-                                            circlePosY[bufferIdx] = p.Y;
-                                            bufferIdx++;
-                                        }
-                                        //fit a curve to the data
-                                        double[] polyFitCurve = Fit.Polynomial(circlePosX, circlePosY, 2);
-                                        System.Windows.Point prevPoint = new System.Windows.Point();
-                                        //draw the curve
-                                        for (int j = 0; j < circlePosX.Length; j++)
-                                        {
-                                            double x = circlePosX[j];
-                                            double y = 0;
-                                            for (int k = polyOrder; k >= 0; k--)
-                                            {
-                                                y += polyFitCurve[k] * Math.Pow(x, k);
-                                            }
-
-                                            System.Windows.Point p = new System.Windows.Point(x, y);
-                                            if (j != 0)
-                                                dc.DrawLine(new Pen(Brushes.Blue, 10), prevPoint, p);
-                                            prevPoint = p;
-                                        }
-                                        //draw the prediction curve
-                                        for (int j = 0; j < circlePosX.Length; j++)
-                                        {
-                                            double xScale = circlePosX[circlePosX.Length - 2] - circlePosX[circlePosX.Length - 1];
-                                            double x = circlePosX[0] + xScale * j;
-                                            double y = 0;
-                                            for (int k = polyOrder; k >= 0; k--)
-                                            {
-                                                y += polyFitCurve[k] * Math.Pow(x, k);
-                                            }
-                                            System.Windows.Point p = new System.Windows.Point(x, y);
-                                            if (j != 0)
-                                                dc.DrawLine(new Pen(Brushes.Red, 10), prevPoint, p);
-                                            prevPoint = p;
-                                        }
+                                        drawCurve(circleLocationBuffer[i], dc, polyOrder);
                                     }
 
                                     //dc.DrawRectangle(Brushes.BlueViolet, null, new System.Windows.Rect(new System.Windows.Point(circle.Center.X - 5, circle.Center.Y - 5), new System.Windows.Point(circle.Center.X + 5, circle.Center.Y + 5)));
@@ -802,7 +958,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                         //draw helper data in corner of screen
                         string data = $"FramesPerSecond: {FramesPerSecond}\ndp_resolution: {dp_resolution}\nminDistanceFromOtherCenter: {minDistanceFromOtherCenter}\ncanny_upper_threshold: {canny_upper_threshold}\nconfidence: {confidence*100}%\nminRadius: {minRadius}\nmaxRadius: {maxRadius}";
                         dc.DrawText(
-                            new FormattedText(data, CultureInfo.GetCultureInfo("en-us"), FlowDirection.RightToLeft, new Typeface("Georgia"), DrawTextFontSize, Brushes.LawnGreen),
+                            new FormattedText(data, CultureInfo.GetCultureInfo("en-us"), FlowDirection.RightToLeft, new Typeface("Georgia"), DrawTextFontSize, Brushes.Blue),
                             new System.Windows.Point(bitmap.PixelWidth - 10, 10)
                         );
                     }
@@ -1090,6 +1246,7 @@ namespace Microsoft.Samples.Kinect.FaceBasics
                                                                 : Properties.Resources.SensorNotAvailableStatusText;
             }
         }
+        public bool dragging = false;
         /// <summary>
         /// sets the hough circle detection parameters
         /// </summary>
@@ -1101,40 +1258,20 @@ namespace Microsoft.Samples.Kinect.FaceBasics
             {
                 case "accumRes":
                     this.dp_resolution = (int)e;
-                    using (DrawingContext dc = this.drawingGroup.Append())
-                    {
-                        dc.DrawText(
-                            new FormattedText(e.ToString(),CultureInfo.GetCultureInfo("en-us"),FlowDirection.LeftToRight,new Typeface("Georgia"),DrawTextFontSize,Brushes.Cyan),
-                            new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2)
-                            );
-                    }
                     break;
                 case "circleDist":
                     this.minDistanceFromOtherCenter = (int)e;
                     using (DrawingContext dc = this.drawingGroup.Append())
                     {
-                        dc.DrawLine(new Pen(Brushes.Red, 10), new System.Windows.Point((this.bitmap.PixelWidth / 2) - e / 2, this.bitmap.PixelHeight / 2), new System.Windows.Point((this.bitmap.PixelWidth / 2) + e / 2, this.bitmap.PixelHeight / 2));
+                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new Point((this.bitmap.PixelWidth / 2) - minDistanceFromOtherCenter/2, this.bitmap.PixelHeight / 2), minRadius, minRadius);
+                        dc.DrawEllipse(null, new Pen(Brushes.Cyan, 5), new Point((this.bitmap.PixelWidth / 2) + minDistanceFromOtherCenter/2, this.bitmap.PixelHeight / 2), minRadius, minRadius);
                     }
                     break;
                 case "cannyThreshold":
                     this.canny_upper_threshold = (int)e;
-                    using (DrawingContext dc = this.drawingGroup.Append())
-                    {
-                        dc.DrawText(
-                            new FormattedText(e.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.Cyan),
-                            new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2)
-                            );
-                    }
                     break;
                 case "confidence":
-                    this.confidence = (double)(e / 100.0);
-                    using (DrawingContext dc = this.drawingGroup.Append())
-                    {
-                        dc.DrawText(
-                            new FormattedText(e.ToString(), CultureInfo.GetCultureInfo("en-us"), FlowDirection.LeftToRight, new Typeface("Georgia"), DrawTextFontSize, Brushes.Cyan),
-                            new System.Windows.Point(this.bitmap.PixelWidth / 2, this.bitmap.PixelHeight / 2)
-                            );
-                    }
+                    this.confidence = (double)((int)e / 100.0);
                     break;
                 case "minCircle":
                     this.minRadius = (int)e;

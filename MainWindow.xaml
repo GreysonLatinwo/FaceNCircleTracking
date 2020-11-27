@@ -5,7 +5,7 @@
         Title="Face Basics" 
         Height="781.5" Width="1046.5" 
         Loaded="MainWindow_Loaded"
-        Closing="MainWindow_Closing" WindowStartupLocation="CenterScreen" Icon="Images/Logo.png">
+        Closing="MainWindow_Closing" WindowStartupLocation="CenterScreen" Icon="Images/Kinect.ico">
     <Window.Resources>
         <SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e" />
         <SolidColorBrush x:Key="KinectPurpleBrush" Color="#ff52318f" />
@@ -19,7 +19,7 @@
         </Grid.RowDefinitions>
 
         <Image Grid.Row="0" Source="Images\Untitled.png" HorizontalAlignment="Left" Stretch="Fill" Width="46" Margin="2,10,0,0" />
-        <TextBlock Grid.Row="0" Margin="0,0,-1,10" HorizontalAlignment="Right" VerticalAlignment="Bottom" Foreground="{StaticResource MediumGreyBrush}" FontFamily="Segoe UI" FontSize="18"><Run Text="Face Basics"/></TextBlock>
+        <TextBlock Grid.Row="0" Margin="0,0,0,10" VerticalAlignment="Bottom" Foreground="{StaticResource MediumGreyBrush}" FontFamily="Segoe UI" FontSize="18" Text="wHErE dA CiRcLe" Width="154" HorizontalAlignment="Right" FrameworkElement.FlowDirection="RightToLeft"/>
         <Image Grid.Row="0" Source="Images\Status.png" Stretch="None" HorizontalAlignment="Center" Margin="0 0 0 5" />
 
         <Viewbox Grid.Row="1" HorizontalAlignment="Center">
